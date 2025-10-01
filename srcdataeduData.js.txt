@@ -1,0 +1,95 @@
+// src/data/eduData.js
+
+// Countries are now stored as objects: { name, code, universities: { ... } }
+export const EDU = {
+  Africa: [
+    {
+      name: "Nigeria",
+      code: "NG",
+      universities: {
+        "University of Lagos": {
+          "Faculty of Engineering": { programs: ["Computer Engineering", "Electrical Engineering"] },
+          "Faculty of Science": { programs: ["Computer Science", "Mathematics"] },
+        },
+      },
+    },
+    {
+      name: "Kenya",
+      code: "KE",
+      universities: {
+        "University of Nairobi": {
+          "School of Computing": { programs: ["Computer Science", "Information Technology"] },
+        },
+      },
+    },
+  ],
+  Europe: [
+    {
+      name: "United Kingdom",
+      code: "GB",
+      universities: {
+        "University of Oxford": {
+          "Department of Computer Science": { programs: ["Computer Science BSc", "Software Engineering"] },
+        },
+      },
+    },
+  ],
+};
+
+/* ---------------------- Helpers (safe & simple) ---------------------- */
+
+// Continents list
+export const getContinents = () => Object.keys(EDU);
+
+// Return an array of { name, code } for a continent
+export const getCountryObjects = (continent) => {
+  const block = EDU[continent];
+  if (!block) return [];
+
+  // Back-compat: if someone still has the old keyed-object shape, convert it on the fly
+  if (!Array.isArray(block)) {
+    return Object.keys(block).map((countryName) => ({
+      name: countryName,
+      code: "", // unknown without ref data in old shape
+      universities: block[countryName],
+    }));
+  }
+  return block;
+};
+
+// Return just country names (useful for dropdowns already expecting strings)
+export const getCountries = (continent) => getCountryObjects(continent).map((c) => c.name);
+
+// Find a country object by name
+export const getCountryMeta = (continent, countryName) =>
+  getCountryObjects(continent).find((c) => c.name === countryName) || null;
+
+// Get ISO-2 country code by name (e.g., "NG")
+export const getCountryCode = (continent, countryName) =>
+  (getCountryMeta(continent, countryName)?.code) || "";
+
+// Universities under a given country
+export const getUniversities = (continent, countryName) => {
+  const c = getCountryMeta(continent, countryName);
+  if (!c || !c.universities) return [];
+  return Object.keys(c.universities);
+};
+
+// Faculties/Schools under a university
+export const getFaculties = (continent, countryName, university) => {
+  const c = getCountryMeta(continent, countryName);
+  if (!c) return [];
+  const u = c.universities?.[university];
+  return u ? Object.keys(u) : [];
+};
+
+// Programs under a faculty
+export const getPrograms = (continent, countryName, university, faculty) => {
+  const c = getCountryMeta(continent, countryName);
+  if (!c) return [];
+  const progArr = c.universities?.[university]?.[faculty]?.programs;
+  return Array.isArray(progArr) ? progArr : [];
+};
+
+// Standard years
+export const YEARS = ["1st Year", "2nd Year", "3rd Year", "4th Year", "5th Year", "6th Year"];

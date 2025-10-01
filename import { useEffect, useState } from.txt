@@ -1,0 +1,533 @@
+import { useEffect, useState } from "react"; 
+import { useNavigate } from "react-router-dom";
+import {
+  getContinents,
+  getCountries,
+  getUniversities,
+  getFaculties,
+  getPrograms,
+  YEARS,
+} from "../data/eduData.js";
+
+/* ================= Helpers ================= */
+
+function safeParse(json) {
+  try {
+    return JSON.parse(json || "");
+  } catch {
+    return null;
+  }
+}
+
+/** Read file as DataURL */
+function readFileAsDataURL(file) {
+  return new Promise((resolve, reject) => {
+    const r = new FileReader();
+    r.onload = () => resolve(r.result);
+    r.onerror = reject;
+    r.readAsDataURL(file);
+  });
+}
+
+/** Downscale image to fit within maxDim x maxDim and compress to JPEG */
+async function downscaleImageToDataURL(file, maxDim = 320, quality = 0.82) {
+  const blobUrl = URL.createObjectURL(file);
+  try {
+    const img = await new Promise((res, rej) => {
+      const i = new Image();
+      i.onload = () => res(i);
+      i.onerror = rej;
+      i.src = blobUrl;
+    });
+
+    const { width, height } = img;
+    const scale = Math.min(1, maxDim / Math.max(width, height));
+    const w = Math.max(1, Math.round(width * scale));
+    const h = Math.max(1, Math.round(height * scale));
+
+    const canvas = document.createElement("canvas");
+    canvas.width = w;
+    canvas.height = h;
+    const ctx = canvas.getContext("2d");
+    ctx.drawImage(img, 0, 0, w, h);
+
+    // Try a couple of qualities if needed to keep size small
+    let q = quality;
+    let dataURL = canvas.toDataURL("image/jpeg", q);
+    const TARGET_BYTES = 400 * 1024; // ~400 KB cap for safety
+    while (dataURL.length * 0.75 > TARGET_BYTES && q > 0.5) {
+      q -= 0.06;
+      dataURL = canvas.toDataURL("image/jpeg", q);
+    }
+    return dataURL;
+  } finally {
+    URL.revokeObjectURL(blobUrl);
+  }
+}
+
+/** Minimal Africa name->ISO2 map (extend as needed) */
+const AFRICA_NAME_TO_ISO = {
+  Nigeria: "NG",
+  Kenya: "KE",
+  Tanzania: "TZ",
+  Ghana: "GH",
+  Uganda: "UG",
+  "South Africa": "ZA",
+  Ethiopia: "ET",
+  Algeria: "DZ",
+  Angola: "AO",
+  Benin: "BJ",
+  Botswana: "BW",
+  "Burkina Faso": "BF",
+  Burundi: "BI",
+  Cameroon: "CM",
+  "Cape Verde": "CV",
+  "Central African Republic": "CF",
+  Chad: "TD",
+  Congo: "CG",
+  "Congo DR": "CD",
+  Djibouti: "DJ",
+  Egypt: "EG",
+  "Equatorial Guinea": "GQ",
+  Eritrea: "ER",
+  "Eswatini (Swaziland)": "SZ",
+  Gabon: "GA",
+  Gambia: "GM",
+  Guinea: "GN",
+  "Ivory Coast": "CI",
+  Lesotho: "LS",
+  Liberia: "LR",
+  Libya: "LY",
+  Madagascar: "MG",
+  Malawi: "MW",
+  Mali: "ML",
+  Mauritania: "MR",
+  Mauritius: "MU",
+  Morocco: "MA",
+  Mozambique: "MZ",
+  Namibia: "NA",
+  Niger: "NE",
+  "Republic of the Congo": "CG",
+  Reunion: "RE",
+  Rwanda: "RW",
+  Senegal: "SN",
+  Seychelles: "SC",
+  "Sierra Leone": "SL",
+  Somalia: "SO",
+  "South Sudan": "SS",
+  Sudan: "SD",
+  Togo: "TG",
+  Tunisia: "TN",
+  Zambia: "ZM",
+  Zimbabwe: "ZW",
+};
+
+
+// Canonicalize a string: remove accents, lower-case, collapse non-alphanumerics
+const canon = (s = "") =>
+  s
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")   // strip diacritics
+    .toLowerCase()
+    .replace(/[^\p{L}\p{N}]+/gu, " ")  // non letters/numbers -> space
+    .trim();
+
+// Build a canonical lookup table once
+const NAME_TO_ISO_CANON = Object.fromEntries(
+  Object.entries(AFRICA_NAME_TO_ISO).map(([k, v]) => [canon(k), v])
+);
+
+// Resolve ISO-2 code from any country string variant
+const isoFromCountryName = (country = "") => NAME_TO_ISO_CANON[canon(country)] || "";
+
+
+/* Try a safe localStorage set, with clear message on quota errors */
+function trySetItem(k, v) {
+  try {
+    localStorage.setItem(k, v);
+    return true;
+  } catch (err) {
+    // QuotaExceededError, SecurityError, etc.
+    console.warn("localStorage.setItem failed for key:", k, err);
+    return false;
+  }
+}
+
+export default function StudentSignUp() {
+  const navigate = useNavigate();
+
+  const [form, setForm] = useState({
+    name: "",
+    email: "",
+    password: "",
+    confirmPassword: "",
+    continent: "",
+    country: "",
+    university: "",
+    faculty: "",
+    program: "",
+    year: "",
+  });
+  const [error, setError] = useState("");
+
+  // Profile photo state
+  const [photo, setPhoto] = useState(null);
+  const [photoUrl, setPhotoUrl] = useState("");
+
+  useEffect(() => {
+    return () => {
+      if (photoUrl) URL.revokeObjectURL(photoUrl);
+    };
+  }, [photoUrl]);
+
+  const onBasic = (e) => setForm({ ...form, [e.target.name]: e.target.value });
+
+  // Cascading resets
+  const onContinent = (e) =>
+    setForm({
+      ...form,
+      continent: e.target.value,
+      country: "",
+      university: "",
+      faculty: "",
+      program: "",
+      year: "",
+    });
+
+  const onCountry = (e) =>
+    setForm({
+      ...form,
+      country: e.target.value,
+      university: "",
+      faculty: "",
+      program: "",
+      year: "",
+    });
+
+  const onUniversity = (e) =>
+    setForm({
+      ...form,
+      university: e.target.value,
+      faculty: "",
+      program: "",
+      year: "",
+    });
+
+  const onFaculty = (e) =>
+    setForm({
+      ...form,
+      faculty: e.target.value,
+      program: "",
+      year: "",
+    });
+
+  const onProgram = (e) =>
+    setForm({
+      ...form,
+      program: e.target.value,
+      year: "",
+    });
+
+  const onYear = (e) => setForm({ ...form, year: e.target.value });
+
+  // Photo selection
+  const onPhoto = (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (!file.type.startsWith("image/")) {
+      setError("Please select an image file.");
+      return;
+    }
+    // Let large images in; we’ll downscale before saving
+    setError("");
+    if (photoUrl) URL.revokeObjectURL(photoUrl);
+    setPhoto(file);
+    setPhotoUrl(URL.createObjectURL(file));
+  };
+
+  const clearPhoto = () => {
+    if (photoUrl) URL.revokeObjectURL(photoUrl);
+    setPhoto(null);
+    setPhotoUrl("");
+  };
+
+  const onSubmit = async (e) => {
+    e.preventDefault();
+    setError("");
+
+    const required = [
+      "name",
+      "email",
+      "password",
+      "confirmPassword",
+      "continent",
+      "country",
+      "university",
+      "faculty",
+      "program",
+      "year",
+    ];
+    const missing = required.filter((k) => !form[k]);
+    if (missing.length) {
+      setError("Please complete all fields.");
+      return;
+    }
+    if (form.password !== form.confirmPassword) {
+      setError("Passwords do not match.");
+      return;
+    }
+
+    try {
+      // Downscale/compress photo if provided
+      let photoDataUrl = "";
+      if (photo) {
+        photoDataUrl = await downscaleImageToDataURL(photo, 320, 0.82);
+      }
+
+      const countryCode =
+  isoFromCountryName(form.country) ||
+  (form.countryCode ? String(form.countryCode).toUpperCase() : "");
+  
+      const newUser = {
+        id: `u_${Date.now()}`,
+        name: form.name,
+        email: form.email,
+        continent: form.continent,
+        country: form.country,
+        countryCode,
+        university: form.university,
+        faculty: form.faculty,
+        program: form.program,
+        year: form.year,
+        photoUrl: photoDataUrl,
+        bannerUrl: "",
+        createdAt: new Date().toISOString(),
+        role: "student",
+      };
+
+      /* ---------- Mark this user as ACTIVE immediately ---------- */
+      // Session: full user + id keys
+      sessionStorage.setItem("currentUser", JSON.stringify(newUser));
+      sessionStorage.setItem("authUserId", newUser.id);      // NEW
+      sessionStorage.setItem("activeUserId", newUser.id);    // NEW
+      sessionStorage.setItem("currentUserId", newUser.id);   // NEW (you already had a local version)
+      sessionStorage.setItem("loggedInUserId", newUser.id);  // NEW
+
+      // Local: id keys first (they're tiny & shouldn't hit quota)
+      trySetItem("authUserId", newUser.id);       // NEW
+      trySetItem("activeUserId", newUser.id);     // NEW
+      trySetItem("currentUserId", newUser.id);    // (was already here later; keep it here too)
+      trySetItem("loggedInUserId", newUser.id);   // NEW
+
+      // Then try saving the full user; trim photo if quota fails
+      let savedFully = trySetItem("currentUser", JSON.stringify(newUser));
+      if (!savedFully) {
+        const trimmed = { ...newUser, photoUrl: "" };
+        trySetItem("currentUser", JSON.stringify(trimmed));
+      }
+
+      // users array
+      const usersArr = safeParse(localStorage.getItem("users")) || [];
+      const usersArrNext = [...usersArr, savedFully ? newUser : { ...newUser, photoUrl: "" }];
+      savedFully = trySetItem("users", JSON.stringify(usersArrNext)) && savedFully;
+
+      // usersById map
+      const usersById = safeParse(localStorage.getItem("usersById")) || {};
+      usersById[newUser.id] = savedFully ? newUser : { ...newUser, photoUrl: "" };
+      trySetItem("usersById", JSON.stringify(usersById));
+
+      navigate("/student-dashboard");
+    } catch (err) {
+      console.error(err);
+      setError(
+        "Registration failed. Likely due to browser storage limits (large photo). Please try again with a smaller image or remove the photo."
+      );
+    }
+  };
+
+  // Options
+  const continents = getContinents();
+  const countries = getCountries(form.continent);
+  const universities = getUniversities(form.continent, form.country);
+  const faculties = getFaculties(form.continent, form.country, form.university);
+  const programs = getPrograms(form.continent, form.country, form.university, form.faculty);
+
+  return (
+    <div className="min-h-screen flex flex-col bg-gradient-to-br from-[#f0f6ff] via-white to-[#eef2ff]">
+      <main className="flex-1">
+        <section className="max-w-2xl mx-auto px-4 py-12">
+          <div className="text-center">
+            <img src="/logo.jpeg" alt="ScholarsKnowledge Logo" className="mx-auto h-14 w-14 object-contain" />
+            <h1 className="mt-3 text-3xl md:text-4xl font-bold text-slate-900">Student Sign Up</h1>
+          </div>
+
+          <form onSubmit={onSubmit} className="mt-8 space-y-4 bg-white/70 rounded-2xl p-6 border">
+            {error && (
+              <p className="text-red-600 bg-red-50 border border-red-200 rounded px-3 py-2">{error}</p>
+            )}
+
+            {/* Profile Photo Uploader */}
+            <div className="flex items-center gap-4">
+              <div className="h-20 w-20 rounded-full bg-slate-200 overflow-hidden flex items-center justify-center border">
+                {photoUrl ? (
+                  <img src={photoUrl} alt="Profile preview" className="h-full w-full object-cover" />
+                ) : (
+                  <svg viewBox="0 0 24 24" className="h-10 w-10 text-slate-500" fill="none" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5"
+                      d="M12 15.75a3.75 3.75 0 100-7.5 3.75 3.75 0 000 7.5z" />
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5"
+                      d="M4.5 19.5a7.5 7.5 0 0115 0M12 3.75v0" />
+                  </svg>
+                )}
+              </div>
+              <div className="flex flex-col gap-2">
+                <label className="inline-block">
+                  <span className="sr-only">Upload profile photo</span>
+                  <input
+                    type="file"
+                    accept="image/*"
+                    onChange={onPhoto}
+                    className="block w-full text-sm text-slate-600
+                               file:mr-3 file:py-2 file:px-4
+                               file:rounded file:border-0
+                               file:text-sm file:font-semibold
+                               file:bg-blue-600 file:text-white
+                               hover:file:bg-blue-700"
+                  />
+                </label>
+                {photo && (
+                  <button type="button" onClick={clearPhoto} className="text-sm text-slate-600 underline self-start">
+                    Remove photo
+                  </button>
+                )}
+                <p className="text-xs text-slate-500">Large images will be resized to fit storage limits.</p>
+              </div>
+            </div>
+
+            {/* Basic fields */}
+            <input
+              name="name"
+              className="w-full border rounded px-3 py-2"
+              placeholder="Full name"
+              value={form.name}
+              onChange={onBasic}
+            />
+            <input
+              name="email"
+              type="email"
+              className="w-full border rounded px-3 py-2"
+              placeholder="Email"
+              value={form.email}
+              onChange={onBasic}
+            />
+
+            {/* Password + Confirm Password */}
+            <div className="grid md:grid-cols-2 gap-4">
+              <input
+                name="password"
+                type="password"
+                className="w-full border rounded px-3 py-2"
+                placeholder="Password"
+                value={form.password}
+                onChange={onBasic}
+              />
+              <input
+                name="confirmPassword"
+                type="password"
+                className="w-full border rounded px-3 py-2"
+                placeholder="Confirm password"
+                value={form.confirmPassword}
+                onChange={onBasic}
+              />
+            </div>
+
+            {/* Cascading selects */}
+            <Select
+              label="Continent"
+              value={form.continent}
+              onChange={onContinent}
+              options={continents}
+              placeholder="Select Continent"
+            />
+            <Select
+              label="Country"
+              value={form.country}
+              onChange={onCountry}
+              options={countries}
+              placeholder="Select Country"
+              disabled={!form.continent}
+            />
+            <Select
+              label="University"
+              value={form.university}
+              onChange={onUniversity}
+              options={universities}
+              placeholder="Select University"
+              disabled={!form.country}
+            />
+            <Select
+              label="College/School/Faculty/Department"
+              value={form.faculty}
+              onChange={onFaculty}
+              options={faculties}
+              placeholder="Select Faculty/School"
+              disabled={!form.university}
+            />
+            <Select
+              label="Academic Program"
+              value={form.program}
+              onChange={onProgram}
+              options={programs}
+              placeholder="Select Program"
+              disabled={!form.faculty}
+            />
+            <Select
+              label="Year of Study"
+              value={form.year}
+              onChange={onYear}
+              options={YEARS}
+              placeholder="Select Year"
+              disabled={!form.program}
+            />
+
+            <button type="submit" className="w-full bg-[#1a73e8] text-white py-2 rounded font-semibold hover:opacity-90">
+              Submit
+            </button>
+
+            <p className="text-sm text-slate-600 text-center">
+              Already have an account?{" "}
+              <a href="/login?role=student" className="text-[#1a73e8] underline">
+                Log in
+              </a>
+            </p>
+          </form>
+        </section>
+      </main>
+
+      <footer className="bg-blue-900 text-white py-6 text-center text-sm">
+        © {new Date().getFullYear()} ScholarsKnowledge ·{" "}
+        <a href="/login" className="underline">Contact Sales</a>
+      </footer>
+    </div>
+  );
+}
+
+/* Reusable select */
+function Select({ label, value, onChange, options, placeholder, disabled }) {
+  return (
+    <label className="block">
+      <span className="block text-sm text-slate-600 mb-1">{label}</span>
+      <select
+        className="w-full border rounded px-3 py-2 disabled:bg-slate-50"
+        value={value}
+        onChange={onChange}
+        disabled={disabled}
+      >
+        <option value="">{placeholder}</option>
+        {options.map((o) => (
+          <option key={o} value={o}>{o}</option>
+        ))}
+      </select>
+    </label>
+  );
+}

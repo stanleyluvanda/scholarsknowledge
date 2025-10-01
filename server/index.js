@@ -1,0 +1,76 @@
+// server/index.js
+console.log(
+  "[server] using routes from",
+  new URL("./routes/scholarships.js", import.meta.url).pathname
+);
+
+import express from "express";
+import cors from "cors";
+import scholarshipsRoutes from "./routes/scholarships.js";
+import usersRouter from "./routes/users.js"; // <-- add this
+import contactRoutes from "./routes/contact.js";
+import messagesRouter from "./routes/messages.js";
+
+const app = express();
+
+/* ----------------------------- Config / Port ----------------------------- */
+/**
+ * Force default port = 5001 so it avoids conflicts with anything listening on 5000.
+ * Still allows overriding via environment variable: PORT=6000 node index.js
+ */
+const PORT = Number(process.env.PORT) || 5001;
+
+/* ------------------------------- CORS ----------------------------------- */
+/**
+ * During local dev we allow any origin. If you want to restrict, replace "*" with
+ * ["http://localhost:5174", "http://localhost:5173"] or your deployed domains.
+ */
+app.use(
+  cors({
+    origin: "*",
+    methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+    allowedHeaders: ["Content-Type", "Authorization"],
+    credentials: false, // set true only if you're using cookies
+  })
+);
+
+// Handle preflight quickly
+app.options("*", cors());
+
+/* ---------------------------- Body Parsers ------------------------------- */
+/** Allow larger payloads for base64 images (logo/banner) */
+app.use(express.json({ limit: "15mb" }));
+app.use(express.urlencoded({ extended: true, limit: "15mb" }));
+
+/* ----------------------------- Health Checks ---------------------------- */
+app.get("/", (_req, res) => {
+  res.send("Scholarships API is running 🚀");
+});
+
+app.get("/api/health", (_req, res) => {
+  res.json({ ok: true, status: "up", ts: Date.now(), port: PORT });
+});
+
+/* -------------------------------- Routes -------------------------------- */
+app.use("/api/scholarships", scholarshipsRoutes);
+app.use("/api/users", usersRouter); // <-- NEW: lecturers/students users route
+app.use("/api/contact", contactRoutes); // <-- ADD THIS
+app.use("/api/messages", messagesRouter);
+
+
+/* ------------------------------ 404 Handler ------------------------------ */
+app.use((req, res) => {
+  res.status(404).json({ error: "Not found", path: req.originalUrl });
+});
+
+/* ----------------------------- Error Handler ----------------------------- */
+app.use((err, _req, res, _next) => {
+  console.error("[server] Unhandled error:", err);
+  res.status(500).json({ error: "Internal server error" });
+});
+
+/* --------------------------------- Start -------------------------------- */
+app.listen(PORT, () => {
+  console.log(`[server] Effective PORT = ${PORT}`);
+  console.log(`Server running on http://localhost:${PORT}`);
+});

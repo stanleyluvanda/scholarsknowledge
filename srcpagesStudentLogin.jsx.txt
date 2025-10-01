@@ -1,0 +1,55 @@
+// src/pages/StudentLogin.jsx
+import { useState } from "react";
+import { useNavigate } from "react-router-dom";
+
+export default function StudentLogin() {
+  const [email,setEmail] = useState("");
+  const [password,setPassword] = useState("");
+  const [error,setError] = useState("");
+  const navigate = useNavigate();
+
+  const activateUser = (user) => {
+    // Set current user and id keys so dashboard loads THIS user
+    sessionStorage.setItem("currentUser", JSON.stringify(user));
+    sessionStorage.setItem("authUserId", user.id);
+    sessionStorage.setItem("activeUserId", user.id);
+    sessionStorage.setItem("currentUserId", user.id);
+    sessionStorage.setItem("loggedInUserId", user.id);
+
+    try { localStorage.setItem("currentUser", JSON.stringify(user)); } catch {}
+    localStorage.setItem("authUserId", user.id);
+    localStorage.setItem("activeUserId", user.id);
+    localStorage.setItem("currentUserId", user.id);
+    localStorage.setItem("loggedInUserId", user.id);
+
+    // also keep usersById coherent if missing
+    const usersById = JSON.parse(localStorage.getItem("usersById") || "{}");
+    usersById[user.id] = user;
+    localStorage.setItem("usersById", JSON.stringify(usersById));
+  };
+
+  const onSubmit = (e)=>{
+    e.preventDefault(); setError("");
+    const users = JSON.parse(localStorage.getItem("users") || "[]");
+    const u = users.find(x => String(x.email||"").toLowerCase() === email.toLowerCase());
+    if (!u) { setError("No student found with that email."); return; }
+
+    // (Optional) check password if you stored it during Sign-Up.
+    // For now, this demo accepts any password.
+
+    activateUser(u);
+    navigate("/student-dashboard");
+  };
+
+  return (
+    <div className="min-h-screen grid place-items-center bg-slate-50 px-4">
+      <form onSubmit={onSubmit} className="w-full max-w-sm bg-white rounded-xl border p-6 space-y-3">
+        <h1 className="text-xl font-semibold">Student Login</h1>
+        {error && <p className="text-sm text-red-600 bg-red-50 border border-red-200 rounded px-3 py-2">{error}</p>}
+        <input className="w-full border rounded px-3 py-2" type="email" placeholder="Email" value={email} onChange={e=>setEmail(e.target.value)} />
+        <input className="w-full border rounded px-3 py-2" type="password" placeholder="Password" value={password} onChange={e=>setPassword(e.target.value)} />
+        <button className="w-full bg-blue-600 text-white rounded py-2 font-semibold hover:bg-blue-700">Log in</button>
+      </form>
+    </div>
+  );
+}

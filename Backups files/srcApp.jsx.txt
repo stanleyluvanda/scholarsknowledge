@@ -1,0 +1,169 @@
+// src/App.jsx
+import { Routes, Route, Navigate, useLocation } from "react-router-dom";
+import { Suspense, lazy } from "react";
+import Navbar from "./components/Navbar";
+import ScholarshipDetail from "./pages/ScholarshipDetail.jsx";
+
+/* ---------- Eager (lightweight) pages ---------- */
+import Home from "./pages/Home";
+import About from "./pages/About";
+import EduInfo from "./pages/EduInfo";
+import Login from "./pages/Login";
+import PartnerSubmitScholarship from "./pages/PartnerSubmitScholarship.jsx";
+
+/* ---------- Lazy (heavier) pages ---------- */
+const AdminScholarshipList = lazy(() => import("./pages/AdminScholarshipList.jsx"));
+const AdminScholarshipForm = lazy(() => import("./pages/AdminScholarshipForm.jsx"));
+const AdminLogin = lazy(() => import("./pages/AdminLogin.jsx"));
+const AdminDashboard = lazy(() => import("./pages/AdminDashboard.jsx"));
+const Scholarship = lazy(() => import("./pages/Scholarship.jsx"));
+const StudentSignUp = lazy(() => import("./pages/StudentSignUp.jsx"));
+const LecturerSignUp = lazy(() => import("./pages/LecturerSignUp.jsx"));
+const StudentDashboard = lazy(() => import("./pages/StudentDashboard.jsx"));
+const LecturerDashboard = lazy(() => import("./pages/LecturerDashboard.jsx"));
+const StudentMarketplace = lazy(() => import("./pages/StudentMarketplace.jsx"));
+const PartnerSignUp = lazy(() => import("./pages/PartnerSignUp.jsx"));
+const PartnerLogin = lazy(() => import("./pages/PartnerLogin.jsx"));
+const PartnerWelcome = lazy(() => import("./pages/PartnerWelcome.jsx"));
+const Partners = lazy(() => import("./pages/Partners.jsx"));
+const PartnerDashboard = lazy(() => import("./pages/PartnerDashboard.jsx"));
+const UniversityAcademicPlatform = lazy(() => import("./pages/UniversityAcademicPlatform.jsx"));
+const GlobalAcademicPlatform = lazy(() => import("./pages/GlobalAcademicPlatform.jsx"));
+
+/* ---------- tiny auth helpers (ONE copy each) ---------- */
+function safeParse(json) { try { return JSON.parse(json || ""); } catch { return null; } }
+const ID_KEYS = ["authUserId","activeUserId","currentUserId","loggedInUserId"];
+
+function loadActiveUser() {
+  for (const src of [sessionStorage, localStorage]) {
+    for (const key of ID_KEYS) {
+      const id = src.getItem(key);
+      if (id) {
+        const byId = safeParse(localStorage.getItem("usersById")) || {};
+        if (byId[id]) return byId[id];
+        const arr = safeParse(localStorage.getItem("users")) || [];
+        const found = arr.find(u => u.id === id || u.uid === id || u.userId === id);
+        if (found) return found;
+      }
+    }
+  }
+  return (
+    safeParse(sessionStorage.getItem("currentUser")) ||
+    safeParse(localStorage.getItem("currentUser"))
+  );
+}
+function RequireAuth({ children }) {
+  const user = loadActiveUser();
+  if (!user) return <Navigate to="/login?role=student" replace />;
+  return children;
+}
+
+function loadPartner() {
+  try { return JSON.parse(localStorage.getItem("partnerAuth") || "null"); } catch { return null; }
+}
+function RequirePartner({ children }) {
+  const loc = useLocation();
+  const partner = loadPartner();
+  const isAuthed = !!(partner && (partner.email || partner.username || partner.user));
+  if (!isAuthed) {
+    return <Navigate to="/partner/login" state={{ from: loc }} replace />;
+  }
+  return children;
+}
+
+function loadAdmin() {
+  try { return JSON.parse(localStorage.getItem("adminAuth") || "null"); } catch { return null; }
+}
+function RequireAdmin({ children }) {
+  const admin = loadAdmin();
+  if (!admin) return <Navigate to="/admin/login" replace />;
+  return children;
+}
+
+/* ---------- Suspense fallback ---------- */
+function PageLoading() {
+  return (
+    <div className="w-full flex items-center justify-center py-16 text-slate-600">
+      Loading…
+    </div>
+  );
+}
+
+/* ---------- NotFound ---------- */
+function NotFound() {
+  return (
+    <div className="max-w-3xl mx-auto px-4 py-16">
+      <h1 className="text-2xl font-bold">Page not found</h1>
+      <p className="mt-2 text-slate-600">
+        The page you’re looking for doesn’t exist. Go back{" "}
+        <a href="/login" className="text-blue-600 underline">to login</a>.
+      </p>
+    </div>
+  );
+}
+
+/* ---------- App ---------- */
+export default function App() {
+  return (
+    <div className="min-h-screen flex flex-col">
+      <Navbar />
+      <div className="flex-1">
+        <Suspense fallback={<PageLoading />}>
+          <Routes>
+            {/* Public */}
+            <Route path="/" element={<Home />} />
+            <Route path="/home" element={<Navigate to="/" replace />} />
+            <Route path="/about" element={<About />} />
+            <Route path="/eduinfo" element={<EduInfo />} />
+            <Route path="/scholarship" element={<Scholarship />} />
+            <Route path="/scholarship/:id" element={<ScholarshipDetail />} />
+            <Route path="/partners" element={<Partners />} />
+
+            {/* Auth */}
+            <Route path="/login" element={<Login />} />
+
+            {/* Sign-ups */}
+            <Route path="/student-sign-up" element={<StudentSignUp />} />
+            <Route path="/lecturer-sign-up" element={<LecturerSignUp />} />
+            <Route path="/student-signup" element={<Navigate to="/student-sign-up" replace />} />
+            <Route path="/lecturer-signup" element={<Navigate to="/lecturer-sign-up" replace />} />
+
+            {/* Partner portal */}
+            <Route path="/partner/signup" element={<PartnerSignUp />} />
+            <Route path="/partner/login" element={<PartnerLogin />} />
+            <Route path="/partner/welcome" element={<RequirePartner><PartnerWelcome /></RequirePartner>} />
+            <Route path="/partner/submit-scholarship" element={<RequirePartner><PartnerSubmitScholarship /></RequirePartner>} />
+            <Route path="/partner/dashboard" element={<RequirePartner><PartnerDashboard /></RequirePartner>} />
+
+            {/* Dashboards */}
+            <Route path="/student-dashboard" element={<RequireAuth><StudentDashboard /></RequireAuth>} />
+            <Route path="/lecturer-dashboard" element={<RequireAuth><LecturerDashboard /></RequireAuth>} />
+
+            {/* Student Marketplace */}
+            <Route path="/student-marketplace" element={<RequireAuth><StudentMarketplace /></RequireAuth>} />
+            <Route path="/market" element={<Navigate to="/student-marketplace" replace />} />
+
+            {/* Academic Platforms */}
+            <Route path="/university-academic-platform" element={<RequireAuth><UniversityAcademicPlatform /></RequireAuth>} />
+            <Route path="/global-academic-platform" element={<RequireAuth><GlobalAcademicPlatform /></RequireAuth>} />
+            <Route path="/academic/university" element={<Navigate to="/university-academic-platform" replace />} />
+            <Route path="/academic/global" element={<Navigate to="/global-academic-platform" replace />} />
+
+            {/* Admin Portal */}
+            <Route path="/admin/login" element={<AdminLogin />} />
+            <Route path="/admin/dashboard" element={<RequireAdmin><AdminDashboard /></RequireAdmin>} />
+            <Route path="/admin/scholarships" element={<RequireAdmin><AdminScholarshipList /></RequireAdmin>} />
+            <Route path="/admin/scholarships/new" element={<RequireAdmin><AdminScholarshipForm mode="create" /></RequireAdmin>} />
+            <Route path="/admin/scholarships/:id/edit" element={<RequireAdmin><AdminScholarshipForm mode="edit" /></RequireAdmin>} />
+
+            {/* Ping test */}
+            <Route path="/__ping" element={<div className="p-8">Router OK</div>} />
+
+            {/* 404 */}
+            <Route path="*" element={<NotFound />} />
+          </Routes>
+        </Suspense>
+      </div>
+    </div>
+  );
+}

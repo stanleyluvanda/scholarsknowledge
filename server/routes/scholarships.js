@@ -1,0 +1,424 @@
+// server/routes/scholarships.js
+import express from "express";
+import db from "../db.js";
+
+const router = express.Router();
+
+/* -------------------- Pagination constants (NEW) -------------------- */
+const DEFAULT_PAGE_SIZE = 100;
+const MAX_PAGE_SIZE = 100;
+
+/* --------------------------------------------------------------------------
+   Ensure schema stays compatible (safe no-ops if columns already exist)
+   We only add columns that might be missing in older local DBs.
+--------------------------------------------------------------------------- */
+try { db.prepare("ALTER TABLE scholarships ADD COLUMN description TEXT").run(); } catch (_) {}
+try { db.prepare("ALTER TABLE scholarships ADD COLUMN eligibility TEXT").run(); } catch (_) {}
+try { db.prepare("ALTER TABLE scholarships ADD COLUMN benefits TEXT").run(); } catch (_) {}
+try { db.prepare("ALTER TABLE scholarships ADD COLUMN howToApply TEXT").run(); } catch (_) {}
+try { db.prepare("ALTER TABLE scholarships ADD COLUMN notes TEXT").run(); } catch (_) {}
+try { db.prepare("ALTER TABLE scholarships ADD COLUMN status TEXT DEFAULT 'pending'").run(); } catch (_) {}
+try { db.prepare("ALTER TABLE scholarships ADD COLUMN amount TEXT").run(); } catch (_) {}
+try { db.prepare("ALTER TABLE scholarships ADD COLUMN partnerEmail TEXT").run(); } catch (_) {}
+try { db.prepare("ALTER TABLE scholarships ADD COLUMN partnerApplyUrl TEXT").run(); } catch (_) {}
+try { db.prepare("ALTER TABLE scholarships ADD COLUMN createdAt TEXT").run(); } catch (_) {}
+try { db.prepare("ALTER TABLE scholarships ADD COLUMN updatedAt TEXT").run(); } catch (_) {}
+// NEW: image fields for logo/banner
+try { db.prepare("ALTER TABLE scholarships ADD COLUMN imageUrl TEXT").run(); } catch (_) {}
+try { db.prepare("ALTER TABLE scholarships ADD COLUMN imageData TEXT").run(); } catch (_) {}
+
+// Optional one-time backfill: ensure createdAt is present for all rows
+try {
+  db.prepare(`
+    UPDATE scholarships
+    SET createdAt = COALESCE(createdAt, updatedAt, datetime('now'))
+    WHERE createdAt IS NULL OR createdAt = ''
+  `).run();
+} catch (_) {}
+
+/* ------------ Continents (server copy, for continent filtering) ------------ */
+const REGIONS = {
+  Africa: [
+    "Algeria","Angola","Benin","Botswana","Burkina Faso","Burundi","Cabo Verde","Cameroon","Central African Republic",
+    "Chad","Comoros","Congo (Congo-Brazzaville)","Côte d’Ivoire","Democratic Republic of the Congo","Djibouti","Egypt",
+    "Equatorial Guinea","Eritrea","Eswatini","Ethiopia","Gabon","Gambia","Ghana","Guinea","Guinea-Bissau","Kenya",
+    "Lesotho","Liberia","Libya","Madagascar","Malawi","Mali","Mauritania","Mauritius","Morocco","Mozambique","Namibia",
+    "Niger","Nigeria","Rwanda","São Tomé and Príncipe","Senegal","Seychelles","Sierra Leone","Somalia","South Africa",
+    "South Sudan","Sudan","Tanzania","Togo","Tunisia","Uganda","Zambia","Zimbabwe"
+  ],
+  Asia: [
+    "Afghanistan","Armenia","Azerbaijan","Bahrain","Bangladesh","Bhutan","Brunei","Cambodia","China","Cyprus",
+    "Georgia","India","Indonesia","Iran","Iraq","Israel","Japan","Jordan","Kazakhstan","Kuwait","Kyrgyzstan","Laos",
+    "Lebanon","Malaysia","Maldives","Mongolia","Myanmar (Burma)","Nepal","North Korea","Oman","Pakistan","Palestine",
+    "Philippines","Qatar","Saudi Arabia","Singapore","South Korea","Sri Lanka","Syria","Tajikistan","Thailand",
+    "Timor-Leste","Turkey","Turkmenistan","United Arab Emirates","Uzbekistan","Vietnam","Yemen"
+  ],
+  Europe: [
+    "Albania","Andorra","Armenia","Austria","Azerbaijan","Belarus","Belgium","Bosnia and Herzegovina","Bulgaria",
+    "Croatia","Cyprus","Czechia","Denmark","Estonia","Finland","France","Georgia","Germany","Greece","Hungary",
+    "Iceland","Ireland","Italy","Kazakhstan","Kosovo","Latvia","Liechtenstein","Lithuania","Luxembourg","Malta",
+    "Moldova","Monaco","Montenegro","Netherlands","North Macedonia","Norway","Poland","Portugal","Romania","Russia",
+    "San Marino","Serbia","Slovakia","Slovenia","Spain","Sweden","Switzerland","Turkey","Ukraine","United Kingdom",
+    "Vatican City"
+  ],
+  "Latin America": [
+    "Mexico","Belize","Costa Rica","El Salvador","Guatemala","Honduras","Nicaragua","Panama",
+    "Antigua and Barbuda","Bahamas","Barbados","Cuba","Dominica","Dominican Republic","Grenada","Haiti","Jamaica",
+    "Saint Kitts and Nevis","Saint Lucia","Saint Vincent and the Grenadines","Trinidad and Tobago",
+    "Argentina","Bolivia","Brazil","Chile","Colombia","Ecuador","Guyana","Paraguay","Peru","Suriname","Uruguay","Venezuela"
+  ],
+  "North America": ["Canada","United States","Greenland","Bermuda"],
+  Oceania: [
+    "Australia","New Zealand","Papua New Guinea","Fiji","Samoa","Tonga","Vanuatu","Solomon Islands","Micronesia",
+    "Palau","Nauru","Kiribati","Marshall Islands","Tuvalu"
+  ],
+};
+
+const countryToContinent = (() => {
+  const map = new Map();
+  for (const [cont, list] of Object.entries(REGIONS)) list.forEach(c => map.set(c, cont));
+  return (country) => map.get(country) || null;
+})();
+
+/* ------------ Helpers ------------ */
+const parseFunding = (raw) => {
+  if (raw == null || raw === "") return [];
+  if (Array.isArray(raw)) return raw;
+  try {
+    const v = JSON.parse(raw);
+    return Array.isArray(v) ? v : (v ? [String(v)] : []);
+  } catch {
+    return String(raw).split(",").map(s => s.trim()).filter(Boolean);
+  }
+};
+
+const rowToObj = (row) => ({
+  ...row,
+  fundingType: parseFunding(row.fundingType),
+});
+
+const normDate = (d) => (d ? new Date(d).getTime() : Infinity);
+
+/* ============================================================================
+   GET /api/scholarships  (list + filter + paginate)
+   Query: q, continent, country, field, funding, level (CSV),
+          sort (deadlineAsc|deadlineDesc|title|newest), page, pageSize,
+          status, partnerEmail
+   status default = 'approved'
+============================================================================ */
+router.get("/", (req, res) => {
+  const {
+    q = "",
+    continent = "All",
+    country = "All",
+    field = "All",
+    funding = "All",
+    level = "",                 // CSV e.g. "Masters,PhD"
+    sort = "deadlineAsc",       // deadlineAsc | deadlineDesc | title | newest
+    page = "1",
+    // NOTE: no default here; we apply DEFAULT_PAGE_SIZE below
+    pageSize: pageSizeRaw,
+    status = "approved",        // 'approved' | 'pending' | 'rejected' | 'all'
+    partnerEmail = "",          // optional, case-insensitive
+  } = req.query;
+
+  // Read from DB
+  let rows;
+  if (status && status !== "all") {
+    rows = db.prepare("SELECT * FROM scholarships WHERE status = ?").all(String(status));
+  } else {
+    rows = db.prepare("SELECT * FROM scholarships").all();
+  }
+
+  // Convert & filter in JS
+  let list = rows.map(rowToObj);
+  const qLower = String(q).trim().toLowerCase();
+  const partnerEmailLower = String(partnerEmail).trim().toLowerCase();
+
+  // optional partner ownership filter
+  if (partnerEmailLower) {
+    list = list.filter(
+      (s) => String(s.partnerEmail || "").toLowerCase() === partnerEmailLower
+    );
+  }
+
+  // text search
+  if (qLower) {
+    list = list.filter(s =>
+      [s.title, s.provider, s.country, s.level, s.field, s.description]
+        .filter(Boolean)
+        .some(v => String(v).toLowerCase().includes(qLower))
+    );
+  }
+
+  // continent
+  if (continent !== "All") {
+    list = list.filter(s => countryToContinent(s.country) === continent);
+  }
+
+  // country
+  if (country !== "All") {
+    list = list.filter(s => String(s.country) === String(country));
+  }
+
+  // field
+  if (field !== "All") {
+    list = list.filter(s => (s.field || s.fieldOfStudy) === field);
+  }
+
+  // funding (exact match against any in array, case-insensitive)
+  if (funding !== "All") {
+    const f = String(funding).toLowerCase();
+    list = list.filter(s => parseFunding(s.fundingType).some(v => String(v).toLowerCase() === f));
+  }
+
+  // level multi-select
+  const levelFilters = String(level)
+    .split(",")
+    .map(s => s.trim())
+    .filter(Boolean)
+    .map(s => s.toLowerCase());
+  if (levelFilters.length > 0) {
+    list = list.filter(s => {
+      const lv = String(s.level || "").toLowerCase();
+      return lv && levelFilters.some(sel => lv.includes(sel));
+    });
+  }
+
+  // ---- sorting (ALWAYS before pagination) ----
+  if (sort === "deadlineAsc") {
+    list.sort((a, b) => normDate(a.deadline) - normDate(b.deadline));
+  } else if (sort === "deadlineDesc") {
+    list.sort((a, b) => normDate(b.deadline) - normDate(a.deadline));
+  } else if (sort === "title") {
+    list.sort((a, b) =>
+      String(a.title || "").localeCompare(String(b.title || ""))
+    );
+  } else if (sort === "newest") {
+    // newest: createdAt desc, then id desc
+    list.sort((a, b) => {
+      const ta = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+      const tb = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+      if (tb !== ta) return tb - ta;
+      return (Number(b.id) || 0) - (Number(a.id) || 0);
+    });
+  }
+
+  // ---------------------------- pagination (UPDATED) ----------------------------
+  const p = Math.max(1, parseInt(page, 10) || 1);
+  const requested = parseInt(pageSizeRaw, 10);
+  const n = Math.max(
+    1,
+    Math.min(
+      MAX_PAGE_SIZE,
+      Number.isFinite(requested) ? requested : DEFAULT_PAGE_SIZE
+    )
+  );
+  const start = (p - 1) * n;
+  const items = list.slice(start, start + n);
+
+  res.json({ items, total: list.length, page: p, pageSize: n });
+});
+
+/* ============================================================================
+   GET /api/scholarships/mine?email=you@example.com   (partner-owned listings)
+   Returns the partner’s scholarships (any status), newest first.
+============================================================================ */
+router.get("/mine", (req, res) => {
+  const email = String(req.query.email || "").trim().toLowerCase();
+  if (!email) return res.status(400).json({ error: "Missing ?email=" });
+
+  const rows = db
+    .prepare("SELECT * FROM scholarships WHERE LOWER(COALESCE(partnerEmail,'')) = @email ORDER BY id DESC")
+    .all({ email });
+
+  res.json({ items: rows.map(rowToObj), total: rows.length });
+});
+
+/* ============================================================================
+   GET /api/scholarships/:id
+============================================================================ */
+router.get("/:id", (req, res) => {
+  const id = Number(req.params.id);
+  const row = db.prepare("SELECT * FROM scholarships WHERE id = ?").get(id);
+  if (!row) return res.status(404).json({ error: "Not found" });
+  return res.json(rowToObj(row));
+});
+
+/* ============================================================================
+   POST /api/scholarships  (partner submit -> default status 'pending')
+   Body: {
+     title, provider, country, level, field,
+     fundingType[], deadline, link, partnerApplyUrl,
+     eligibility, benefits, howToApply, description,
+     amount, notes, partnerEmail,
+     imageUrl, imageData
+   }
+============================================================================ */
+router.post("/", (req, res) => {
+  try {
+    const {
+      title, provider, country, level,
+      field, fundingType, deadline, link, partnerApplyUrl,
+      eligibility, benefits, howToApply, description = "",
+      amount = "", notes = "", partnerEmail = "",
+      imageUrl = "", imageData = ""
+    } = req.body || {};
+
+    if (!title || !provider) {
+      return res.status(400).json({ error: "title and provider are required" });
+    }
+
+    const ins = db.prepare(`
+      INSERT INTO scholarships
+        (title, provider, country, level, field, fundingType, deadline, link,
+         partnerApplyUrl, eligibility, benefits, howToApply, description,
+         amount, notes, status, partnerEmail, createdAt, updatedAt,
+         imageUrl, imageData)
+      VALUES
+        (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?, datetime('now'), datetime('now'),
+         ?, ?)
+    `);
+
+    const result = ins.run(
+      title,
+      provider,
+      country || "Multiple",
+      level || "",
+      field || "",
+      JSON.stringify(fundingType || []),
+      deadline || "",
+      link || "",
+      partnerApplyUrl || "",
+      eligibility || "",
+      benefits || "",
+      howToApply || "",
+      description || "",
+      amount || "",
+      notes || "",
+      String(partnerEmail || "").toLowerCase(),
+      imageUrl || "",
+      imageData || ""
+    );
+
+    const created = db.prepare("SELECT * FROM scholarships WHERE id = ?").get(result.lastInsertRowid);
+    return res.status(201).json(rowToObj(created));
+  } catch (e) {
+    console.error("[POST /api/scholarships] error:", e);
+    return res.status(500).json({ error: "Internal error", detail: String(e.message || e) });
+  }
+});
+
+/* ============================================================================
+   PUT /api/scholarships/:id  (full update; admin or owner)
+============================================================================ */
+router.put("/:id", (req, res) => {
+  try {
+    const id = Number(req.params.id);
+    const row = db.prepare("SELECT * FROM scholarships WHERE id = ?").get(id);
+    if (!row) return res.status(404).json({ error: "Not found" });
+
+    const {
+      title = row.title,
+      provider = row.provider,
+      country = row.country,
+      level = row.level,
+      field = row.field,
+      fundingType = parseFunding(row.fundingType),
+      deadline = row.deadline,
+      link = row.link,
+      partnerApplyUrl = row.partnerApplyUrl,
+      eligibility = row.eligibility,
+      benefits = row.benefits,
+      howToApply = row.howToApply,
+      description = row.description,
+      amount = row.amount,
+      notes = row.notes,
+      status = row.status,
+      partnerEmail = row.partnerEmail,
+      imageUrl = row.imageUrl,
+      imageData = row.imageData,
+    } = req.body || {};
+
+    const upd = db.prepare(`
+      UPDATE scholarships SET
+        title=?, provider=?, country=?, level=?, field=?, fundingType=?, deadline=?, link=?,
+        partnerApplyUrl=?, eligibility=?, benefits=?, howToApply=?, description=?, amount=?,
+        notes=?, status=?, partnerEmail=?, updatedAt=datetime('now'),
+        imageUrl=?, imageData=?
+      WHERE id = ?
+    `);
+
+    upd.run(
+      title,
+      provider,
+      country,
+      level,
+      field,
+      JSON.stringify(fundingType || []),
+      deadline,
+      link,
+      partnerApplyUrl,
+      eligibility,
+      benefits,
+      howToApply,
+      description,
+      amount,
+      notes,
+      status,
+      partnerEmail,
+      imageUrl || "",
+      imageData || "",
+      id
+    );
+
+    const updated = db.prepare("SELECT * FROM scholarships WHERE id = ?").get(id);
+    res.json(rowToObj(updated));
+  } catch (e) {
+    console.error("[PUT /api/scholarships/:id] error:", e);
+    return res.status(500).json({ error: "Internal error", detail: String(e.message || e) });
+  }
+});
+
+/* ============================================================================
+   PATCH /api/scholarships/:id/status  (approve / reject / pending / archived)
+   Body: { status: 'approved' | 'pending' | 'rejected' | 'archived' }
+============================================================================ */
+router.patch("/:id/status", (req, res) => {
+  try {
+    const id = Number(req.params.id);
+    const { status } = req.body || {};
+    const ALLOWED = new Set(["approved", "pending", "rejected", "archived"]);
+    if (!ALLOWED.has(String(status))) {
+      return res.status(400).json({ error: "Invalid status" });
+    }
+    const exists = db.prepare("SELECT id FROM scholarships WHERE id = ?").get(id);
+    if (!exists) return res.status(404).json({ error: "Not found" });
+
+    db.prepare("UPDATE scholarships SET status = ?, updatedAt=datetime('now') WHERE id = ?")
+      .run(String(status), id);
+
+    const updated = db.prepare("SELECT * FROM scholarships WHERE id = ?").get(id);
+    res.json(rowToObj(updated));
+  } catch (e) {
+    console.error("[PATCH /api/scholarships/:id/status] error:", e);
+    return res.status(500).json({ error: "Internal error", detail: String(e.message || e) });
+  }
+});
+
+/* ============================================================================
+   DELETE /api/scholarships/:id
+============================================================================ */
+router.delete("/:id", (req, res) => {
+  try {
+    const id = Number(req.params.id);
+    const del = db.prepare("DELETE FROM scholarships WHERE id = ?").run(id);
+    if (del.changes === 0) return res.status(404).json({ error: "Not found" });
+    res.json({ ok: true });
+  } catch (e) {
+    console.error("[DELETE /api/scholarships/:id] error:", e);
+    return res.status(500).json({ error: "Internal error", detail: String(e.message || e) });
+  }
+});
+
+export default router;

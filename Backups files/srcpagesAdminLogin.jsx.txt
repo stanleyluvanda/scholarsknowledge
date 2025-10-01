@@ -1,0 +1,88 @@
+// src/pages/AdminLogin.jsx
+import { useState } from "react";
+import { useNavigate } from "react-router-dom";
+
+export default function AdminLogin() {
+  const nav = useNavigate();
+  const [email, setEmail] = useState("");
+  const [pw, setPw] = useState("");
+  const [err, setErr] = useState("");
+
+  // Hardcoded admin credentials
+  const ADMIN_EMAIL = "admin@scholarsknowledge.com";
+  const ADMIN_PASS = "admin123";
+
+  const submit = (e) => {
+    e.preventDefault();
+    setErr("");
+
+    // Simple check
+    if (email.trim().toLowerCase() === ADMIN_EMAIL && pw === ADMIN_PASS) {
+      // Save a tiny auth token in localStorage
+      localStorage.setItem(
+        "adminAuth",
+        JSON.stringify({ email: ADMIN_EMAIL, at: Date.now() })
+      );
+      // Navigate to admin dashboard
+      nav("/admin/dashboard", { replace: true });
+      return;
+    }
+
+    setErr("Invalid credentials");
+  };
+
+  // If you ever get stuck logged in during testing:
+  // localStorage.removeItem("adminAuth");
+
+  return (
+    <div className="min-h-[60vh] flex items-center justify-center px-4">
+      <div className="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+        <h1 className="text-2xl font-bold text-slate-900 text-center">
+          Admin Sign In
+        </h1>
+        <p className="mt-1 text-sm text-slate-600 text-center">
+          Use your admin account to manage scholarships.
+        </p>
+
+        {err && (
+          <div className="mt-4 rounded border border-red-200 bg-red-50 p-2 text-sm text-red-700">
+            {err}
+          </div>
+        )}
+
+        <form onSubmit={submit} className="mt-6 space-y-4">
+          <label className="block">
+            <div className="text-sm font-medium text-slate-700">Email</div>
+            <input
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              className="mt-1 w-full rounded border border-slate-300 px-3 py-2 text-sm"
+              placeholder="admin@scholarsknowledge.com"
+              required
+            />
+          </label>
+
+          <label className="block">
+            <div className="text-sm font-medium text-slate-700">Password</div>
+            <input
+              type="password"
+              value={pw}
+              onChange={(e) => setPw(e.target.value)}
+              className="mt-1 w-full rounded border border-slate-300 px-3 py-2 text-sm"
+              placeholder="••••••••"
+              required
+            />
+          </label>
+
+          <button
+            className="w-full rounded bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700"
+            type="submit"
+          >
+            Sign In
+          </button>
+        </form>
+      </div>
+    </div>
+  );
+}

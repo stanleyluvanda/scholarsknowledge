@@ -1,0 +1,163 @@
+[
+  {
+    "id": 1,
+    "title": "University of Nairobi Full Scholarship",
+    "provider": "UoN",
+    "country": "Kenya",
+    "level": "Undergraduate",
+    "deadline": "2025-05-30",
+    "link": "https://www.uonbi.ac.ke/scholarships/uon-full",
+    "partnerApplyUrl": "https://www.uonbi.ac.ke/apply",
+    "description": "Full tuition support for high-achieving Kenyan students with financial need. Renewable annually subject to academic performance.",
+    "eligibility": [
+      "Kenyan citizens with KCSE mean grade A- or higher",
+      "Admitted to a full-time undergraduate program at the University of Nairobi",
+      "Demonstrated financial need"
+    ],
+    "benefits": [
+      "Full tuition and mandatory fees",
+      "Monthly stipend",
+      "On-campus accommodation",
+      "Academic mentorship and career support"
+    ],
+    "howToApply": [
+      "Complete the online application form on the scholarship portal",
+      "Upload required documents (see list below)",
+      "Submit before the stated deadline",
+      "Shortlisted candidates will be invited for interviews"
+    ],
+    "documentsRequired": [
+      "KCSE certificate and transcripts",
+      "National ID / Birth certificate",
+      "University admission letter",
+      "Recommendation letter from a teacher or community leader",
+      "Proof of financial need (e.g., guardian income statement)"
+    ],
+    "contactEmail": "scholarships@uonbi.ac.ke"
+  },
+  {
+    "id": 2,
+    "title": "Mastercard Foundation Scholarship",
+    "provider": "Mastercard Foundation",
+    "country": "Multiple (Africa focus)",
+    "level": "Undergraduate / Masters",
+    "deadline": "2025-06-15",
+    "link": "https://mastercardfdn.org/scholars/",
+    "description": "Supports academically talented youth—especially from economically marginalized communities—to access quality education.",
+    "eligibility": [
+      "Strong academic record",
+      "Demonstrated leadership and community service",
+      "Significant financial need"
+    ],
+    "benefits": [
+      "Tuition, accommodation, books, and living expenses",
+      "Leadership development and internships",
+      "Alumni network and career services"
+    ],
+    "howToApply": [
+      "Apply via participating partner universities",
+      "Follow each partner’s specific application instructions"
+    ],
+    "documentsRequired": [
+      "Academic transcripts and certificates",
+      "Personal statement",
+      "Two recommendation letters"
+    ],
+    "contactEmail": "info@mastercardfdn.org"
+  },
+  {
+    "id": 3,
+    "title": "Oxford Africa Graduate Scholarship",
+    "provider": "University of Oxford",
+    "country": "United Kingdom",
+    "level": "Masters / DPhil",
+    "deadline": "2025-07-01",
+    "link": "https://www.ox.ac.uk/admissions/graduate/fees-and-funding/fees-funding-and-scholarship-search",
+    "description": "Funding for outstanding African students pursuing graduate study at the University of Oxford.",
+    "eligibility": [
+      "Ordinarily resident in an African country",
+      "Offer to study an eligible Oxford graduate program",
+      "Strong academic merit and potential"
+    ],
+    "benefits": [
+      "Course fees and a grant for living costs",
+      "Access to Oxford’s research facilities and networks"
+    ],
+    "howToApply": [
+      "Apply for your Oxford course by the relevant deadline",
+      "Complete the scholarships section in the course application"
+    ],
+    "documentsRequired": [
+      "Degree transcripts",
+      "CV/Resume",
+      "Research proposal (for DPhil)",
+      "References"
+    ],
+    "contactEmail": "graduate.funding@admin.ox.ac.uk"
+  },
+  {
+    "id": 4,
+    "title": "DAAD EPOS Scholarships",
+    "provider": "DAAD",
+    "country": "Germany",
+    "level": "Masters",
+    "deadline": "2025-10-31",
+    "link": "https://www.daad.de/en/study-and-research-in-germany/scholarships/epos/",
+    "description": "Postgraduate courses with special relevance to developing countries.",
+    "eligibility": [
+      "Bachelor’s degree (normally in a related field)",
+      "At least two years of professional experience",
+      "Motivation to contribute to development-related challenges"
+    ],
+    "benefits": [
+      "Monthly stipend",
+      "Health, accident and personal liability insurance",
+      "Travel allowance"
+    ],
+    "howToApply": [
+      "Apply directly to the eligible EPOS course",
+      "Include DAAD application forms and required documents"
+    ],
+    "documentsRequired": [
+      "DAAD application form",
+      "Letter of motivation",
+      "CV (Europass format)",
+      "Certificates of employment",
+      "Proof of language skills"
+    ],
+    "contactEmail": "epos@daad.de"
+  },
+  {
+    "id": 5,
+    "title": "Chevening Scholarships",
+    "provider": "UK FCDO",
+    "country": "United Kingdom",
+    "level": "Masters",
+    "deadline": "2025-11-07",
+    "link": "https://www.chevening.org/",
+    "description": "Global scholarship programme that offers future leaders a unique opportunity to study in the UK.",
+    "eligibility": [
+      "Citizenship of a Chevening-eligible country",
+      "Undergraduate degree equivalent to a UK upper second-class 2:1",
+      "At least two years’ work experience",
+      "Offer from a UK university (by the specified deadline)"
+    ],
+    "benefits": [
+      "University tuition fees",
+      "Monthly stipend",
+      "Travel costs to and from the UK",
+      "Arrival allowance and homeward departure allowance"
+    ],
+    "howToApply": [
+      "Apply online via the Chevening application system",
+      "Choose three eligible UK Masters courses",
+      "Submit references and documents by the deadlines"
+    ],
+    "documentsRequired": [
+      "Academic transcripts and certificates",
+      "Two references",
+      "Valid passport/national ID"
+    ],
+    "contactEmail": "applications@chevening.org"
+  }
+]

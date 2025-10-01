@@ -1,0 +1,133 @@
+// src/components/chat/LecturerPicker.jsx
+import { useEffect, useMemo, useState } from "react";
+import { collection, query, where, getDocs, orderBy, limit } from "firebase/firestore";
+import { db } from "../../lib/firebase";
+
+function getCurrentUser() {
+  try {
+    const raw = localStorage.getItem("currentUser");
+    return raw ? JSON.parse(raw) : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Props:
+ * - open (bool)
+ * - onClose()
+ * - onPick(lecturerUser) -> called when a lecturer is selected
+ */
+export default function LecturerPicker({ open, onClose, onPick }) {
+  const me = getCurrentUser();
+  const [loading, setLoading] = useState(false);
+  const [lecturers, setLecturers] = useState([]);
+  const [qtext, setQtext] = useState("");
+
+  const facultyNeedle = useMemo(() => {
+    // Try common keys used in your app
+    return (
+      me?.faculty ||
+      me?.school ||
+      me?.college ||
+      me?.department ||
+      ""
+    );
+  }, [me]);
+
+  useEffect(() => {
+    if (!open) return;
+    (async () => {
+      setLoading(true);
+      try {
+        // users collection should hold { uid, name, role: 'lecturer', faculty/school/college, photoURL, email }
+        const usersRef = collection(db, "users");
+        const clauses = [where("role", "==", "lecturer")];
+
+        // Filter by the same faculty/school/college string the student selected
+        if (facultyNeedle) clauses.push(where("facultyKey", "==", String(facultyNeedle).toLowerCase()));
+
+        const q = query(usersRef, ...clauses, orderBy("name"), limit(100));
+        const snap = await getDocs(q);
+        const list = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+        setLecturers(list);
+      } catch (e) {
+        console.error("LecturerPicker load error:", e);
+      } finally {
+        setLoading(false);
+      }
+    })();
+  }, [open, facultyNeedle]);
+
+  const filtered = useMemo(() => {
+    const n = qtext.trim().toLowerCase();
+    if (!n) return lecturers;
+    return lecturers.filter(l =>
+      [l.name, l.email, l.title]
+        .filter(Boolean)
+        .join(" ")
+        .toLowerCase()
+        .includes(n)
+    );
+  }, [qtext, lecturers]);
+
+  if (!open) return null;
+
+  return (
+    <div className="fixed inset-0 z-[100] flex items-end justify-end">
+      <div className="absolute inset-0 bg-black/20" onClick={onClose} />
+
+      <div className="relative m-4 w-full max-w-md rounded-xl bg-white shadow-lg">
+        <div className="flex items-center justify-between border-b px-4 py-3">
+          <h3 className="font-semibold">Find a lecturer</h3>
+          <button
+            onClick={onClose}
+            className="rounded px-2 py-1 text-sm text-slate-600 hover:bg-slate-100"
+          >
+            Close
+          </button>
+        </div>
+
+        <div className="p-3">
+          <input
+            value={qtext}
+            onChange={(e) => setQtext(e.target.value)}
+            placeholder="Search by name, email, title…"
+            className="w-full rounded border border-slate-300 px-3 py-2 text-sm"
+          />
+        </div>
+
+        <div className="max-h-80 overflow-auto px-3 pb-3">
+          {loading && <div className="p-3 text-sm text-slate-500">Loading lecturers…</div>}
+          {!loading && filtered.length === 0 && (
+            <div className="p-3 text-sm text-slate-500">No lecturers found for your faculty.</div>
+          )}
+
+          <ul className="divide-y">
+            {filtered.map((u) => (
+              <li key={u.uid || u.id} className="flex items-center gap-3 py-2">
+                <img
+                  src={u.photoURL || `https://ui-avatars.com/api/?name=${encodeURIComponent(u.name || "L")}`}
+                  alt=""
+                  className="h-9 w-9 rounded-full object-cover"
+                />
+                <div className="min-w-0 flex-1">
+                  <div className="truncate text-sm font-medium">{u.name || "Lecturer"}</div>
+                  <div className="truncate text-xs text-slate-500">
+                    {u.title ? `${u.title} • ` : ""}{u.email}
+                  </div>
+                </div>
+                <button
+                  onClick={() => onPick(u)}
+                  className="rounded border border-slate-300 px-3 py-1 text-sm hover:bg-slate-50"
+                >
+                  Chat
+                </button>
+              </li>
+            ))}
+          </ul>
+        </div>
+      </div>
+    </div>
+  );
+}

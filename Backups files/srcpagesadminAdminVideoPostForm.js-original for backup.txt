@@ -1,0 +1,150 @@
+// src/pages/admin/AdminVideoPostForm.jsx
+import { useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
+import YouTubeEmbed from "../../components/YouTubeEmbed";
+
+// helper: pull 11-char YouTube ID from url or raw id
+function extractYouTubeId(input = "") {
+  const s = String(input).trim();
+  const patterns = [
+    /[?&]v=([A-Za-z0-9_-]{11})/,     // ...watch?v=ID
+    /youtu\.be\/([A-Za-z0-9_-]{11})/, // youtu.be/ID
+    /\/embed\/([A-Za-z0-9_-]{11})/,   // /embed/ID
+    /\/shorts\/([A-Za-z0-9_-]{11})/,  // /shorts/ID
+    /^([A-Za-z0-9_-]{11})$/,          // raw ID
+  ];
+  for (const rx of patterns) {
+    const m = s.match(rx);
+    if (m?.[1]) return m[1];
+  }
+  return null;
+}
+
+export default function AdminVideoPostForm() {
+  const navigate = useNavigate();
+  const [title, setTitle] = useState("");
+  const [videoUrlOrId, setVideoUrlOrId] = useState("");
+  const [audience, setAudience] = useState("students"); // "students" | "lecturers" | "both"
+  const [saving, setSaving] = useState(false);
+
+  // Simple admin gate using your existing localStorage flag
+  useEffect(() => {
+    const isAuthed = !!localStorage.getItem("adminAuth");
+    if (!isAuthed) navigate("/admin/login", { replace: true });
+  }, [navigate]);
+
+  async function handleSave(e) {
+    e.preventDefault();
+    const id = extractYouTubeId(videoUrlOrId);
+    if (!id) {
+      alert("That doesn't look like a valid YouTube URL or 11-character ID.");
+      return;
+    }
+
+    setSaving(true);
+    try {
+      const posts = JSON.parse(localStorage.getItem("videoPosts") || "[]");
+
+      const newPost = {
+        id: Date.now().toString(), // simple unique id
+        type: "video",
+        title: title.trim() || null,
+        videoUrlOrId: id,           // store the clean ID only
+        createdByRole: "admin",
+        audience,                   // "students" | "lecturers" | "both"
+        createdAt: new Date().toISOString(),
+      };
+
+      posts.push(newPost);
+      localStorage.setItem("videoPosts", JSON.stringify(posts));
+      // let other tabs/dashboards know something changed
+      window.dispatchEvent(new Event("videoPosts:updated"));
+
+      setTitle("");
+      setVideoUrlOrId("");
+
+      alert("Video post saved to localStorage!");
+      navigate("/admin/dashboard");
+    } catch (err) {
+      console.error(err);
+      alert("Failed to save the video post.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div className="max-w-3xl mx-auto px-4 lg:px-8 py-10">
+      <div className="flex items-center justify-between">
+        <h1 className="text-2xl font-bold">New Video Post</h1>
+        <button
+          onClick={() => navigate("/admin/dashboard")}
+          className="text-sm text-slate-600 hover:underline"
+        >
+          Back
+        </button>
+      </div>
+      <p className="text-slate-600 mt-1">
+        Paste a YouTube URL or the 11-character Video ID, choose an audience, and publish.
+      </p>
+
+      <form onSubmit={handleSave} className="mt-8 space-y-5">
+        <div>
+          <label className="block text-sm font-medium text-slate-700 mb-1">Title (optional)</label>
+          <input
+            className="w-full rounded-lg border border-slate-300 p-2"
+            placeholder="Intro to the platform"
+            value={title}
+            onChange={(e) => setTitle(e.target.value)}
+          />
+        </div>
+
+        <div>
+          <label className="block text-sm font-medium text-slate-700 mb-1">
+            YouTube URL or 11-character ID{" "}
+            <span className="text-slate-400">
+              (e.g. https://youtu.be/EW_TfUnT9c0 or EW_TfUnT9c0)
+            </span>
+          </label>
+          <input
+            className="w-full rounded-lg border border-slate-300 p-2"
+            placeholder="https://youtu.be/xxxxxxxxxxx"
+            value={videoUrlOrId}
+            onChange={(e) => setVideoUrlOrId(e.target.value)}
+          />
+        </div>
+
+        <div>
+          <label className="block text-sm font-medium text-slate-700 mb-1">Audience</label>
+          <select
+            className="w-full rounded-lg border border-slate-300 p-2"
+            value={audience}
+            onChange={(e) => setAudience(e.target.value)}
+          >
+            <option value="students">Students</option>
+            <option value="lecturers">Lecturers</option>
+            <option value="both">Both</option>
+          </select>
+        </div>
+
+        {/* Live preview */}
+        {videoUrlOrId ? (
+          <div className="mt-2">
+            <div className="text-sm font-medium text-slate-700 mb-2">Preview</div>
+            <YouTubeEmbed idOrUrl={videoUrlOrId} title={title || "Video Preview"} />
+          </div>
+        ) : null}
+
+        <div className="pt-2">
+          <button
+            type="submit"
+            disabled={saving}
+            className="rounded-xl bg-slate-900 text-white px-5 py-2.5 font-semibold hover:opacity-90 disabled:opacity-50"
+          >
+            {saving ? "Saving…" : "Publish Video Post"}
+          </button>
+        </div>
+      </form>
+    </div>
+  );
+}
