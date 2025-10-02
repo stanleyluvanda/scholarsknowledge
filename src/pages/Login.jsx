@@ -1,4 +1,4 @@
-// src/pages/Login.jsx 
+// src/pages/Login.jsx
 import { useEffect, useRef, useState } from "react";
 import { useNavigate, useSearchParams, Link } from "react-router-dom";
 
@@ -77,8 +77,13 @@ export default function Login() {
   const [turnToken, setTurnToken] = useState("");     // require a non-empty token
   const [turnReady, setTurnReady] = useState(false);  // optional UI state
 
-  // replace with your real site key (already set correctly for you)
-  const SITE_KEY = "0x4AAAAAAB2QBaumf-KRvBPY";
+  // ✅ Use the site key from your environment (Amplify → Env vars)
+  // Fallback to Cloudflare's public test key when running on localhost.
+  const SITE_KEY =
+    import.meta.env.VITE_TURNSTILE_SITE_KEY ||
+    (typeof window !== "undefined" && window.location.hostname === "localhost"
+      ? "1x00000000000000000000AA" // Cloudflare test key (always passes)
+      : "");
 
   // Make a global callback (handy for debugging & consistency)
   if (typeof window !== "undefined" && !window.onTurnstileSuccess) {
@@ -353,10 +358,10 @@ export default function Login() {
                 </div>
 
                 <div className="text-center">
-                    <Link className="inline-block mt-2 text-[#1a73e8] underline text-sm" to="/forgot-password">
+                  <Link className="inline-block mt-2 text-[#1a73e8] underline text-sm" to="/forgot-password">
                     Forgot your password?
-                     </Link>
-                   </div>
+                  </Link>
+                </div>
               </form>
             </>
           )}

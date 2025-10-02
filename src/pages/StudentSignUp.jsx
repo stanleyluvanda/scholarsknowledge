@@ -372,7 +372,7 @@ export default function StudentSignUp() {
     confirmPassword: "",
     continent: "",
     country: "",
-    countryCode: "", // <— add this so we persist ISO
+    countryCode: "",
     university: "",
     faculty: "",
     program: "",
@@ -410,7 +410,7 @@ export default function StudentSignUp() {
     setForm({
       ...form,
       country,
-      countryCode: isoFromCountryName(country), // <- resolve ISO now
+      countryCode: isoFromCountryName(country),
       university: "",
       faculty: "",
       program: "",
@@ -491,7 +491,6 @@ export default function StudentSignUp() {
     }
 
     try {
-      // Downscale/compress photo if provided
       let photoDataUrl = "";
       if (photo) {
         photoDataUrl = await downscaleImageToDataURL(photo, 320, 0.82);
@@ -516,31 +515,26 @@ export default function StudentSignUp() {
         bannerUrl: "",
         createdAt: new Date().toISOString(),
         role: "student",
-        active: true, // ✅ ensure new students appear as Active in Admin → Members
+        active: true,
       };
 
-      /* ---------- Mark this user as ACTIVE immediately ---------- */
-      // Session: full user + id keys
       sessionStorage.setItem("currentUser", JSON.stringify(newUser));
       sessionStorage.setItem("authUserId", newUser.id);
       sessionStorage.setItem("activeUserId", newUser.id);
       sessionStorage.setItem("currentUserId", newUser.id);
       sessionStorage.setItem("loggedInUserId", newUser.id);
 
-      // Local: id keys first
       trySetItem("authUserId", newUser.id);
       trySetItem("activeUserId", newUser.id);
       trySetItem("currentUserId", newUser.id);
       trySetItem("loggedInUserId", newUser.id);
 
-      // Then try saving the full user; trim photo if quota fails
       let savedFully = trySetItem("currentUser", JSON.stringify(newUser));
       if (!savedFully) {
         const trimmed = { ...newUser, photoUrl: "" };
         trySetItem("currentUser", JSON.stringify(trimmed));
       }
 
-      // users array
       const usersArr = safeParse(localStorage.getItem("users")) || [];
       const usersArrNext = [
         ...usersArr,
@@ -548,7 +542,6 @@ export default function StudentSignUp() {
       ];
       savedFully = trySetItem("users", JSON.stringify(usersArrNext)) && savedFully;
 
-      // usersById map
       const usersById = safeParse(localStorage.getItem("usersById")) || {};
       usersById[newUser.id] = savedFully ? newUser : { ...newUser, photoUrl: "" };
       trySetItem("usersById", JSON.stringify(usersById));
@@ -631,41 +624,60 @@ export default function StudentSignUp() {
               </div>
             </div>
 
-            {/* Basic fields */}
-            <input
-              name="name"
-              className="w-full border rounded px-3 py-2"
-              placeholder="Full name"
-              value={form.name}
-              onChange={onBasic}
-            />
-            <input
-              name="email"
-              type="email"
-              className="w-full border rounded px-3 py-2"
-              placeholder="Email"
-              value={form.email}
-              onChange={onBasic}
-            />
+            {/* Basic fields with labels + placeholders */}
+            <label className="block">
+              <span className="block text-sm text-slate-600 mb-1">Full name</span>
+              <input
+                name="name"
+                type="text"
+                className="w-full border rounded px-3 py-2 bg-white"
+                placeholder="Full name"
+                autoComplete="name"
+                value={form.name}
+                onChange={onBasic}
+              />
+            </label>
+
+            <label className="block">
+              <span className="block text-sm text-slate-600 mb-1">Email</span>
+              <input
+                name="email"
+                type="email"
+                className="w-full border rounded px-3 py-2 bg-white"
+                placeholder="you@example.com"
+                autoComplete="email"
+                value={form.email}
+                onChange={onBasic}
+              />
+            </label>
 
             {/* Password + Confirm Password */}
             <div className="grid md:grid-cols-2 gap-4">
-              <input
-                name="password"
-                type="password"
-                className="w-full border rounded px-3 py-2"
-                placeholder="Password"
-                value={form.password}
-                onChange={onBasic}
-              />
-              <input
-                name="confirmPassword"
-                type="password"
-                className="w-full border rounded px-3 py-2"
-                placeholder="Confirm password"
-                value={form.confirmPassword}
-                onChange={onBasic}
-              />
+              <label className="block">
+                <span className="block text-sm text-slate-600 mb-1">Password</span>
+                <input
+                  name="password"
+                  type="password"
+                  className="w-full border rounded px-3 py-2 bg-white"
+                  placeholder="At least 6 characters"
+                  autoComplete="new-password"
+                  value={form.password}
+                  onChange={onBasic}
+                />
+              </label>
+
+              <label className="block">
+                <span className="block text-sm text-slate-600 mb-1">Confirm password</span>
+                <input
+                  name="confirmPassword"
+                  type="password"
+                  className="w-full border rounded px-3 py-2 bg-white"
+                  placeholder="Re-enter password"
+                  autoComplete="new-password"
+                  value={form.confirmPassword}
+                  onChange={onBasic}
+                />
+              </label>
             </div>
 
             {/* Cascading selects */}
@@ -746,7 +758,7 @@ function Select({ label, value, onChange, options, placeholder, disabled }) {
     <label className="block">
       <span className="block text-sm text-slate-600 mb-1">{label}</span>
       <select
-        className="w-full border rounded px-3 py-2 disabled:bg-slate-50"
+        className="w-full border rounded px-3 py-2 disabled:bg-slate-50 bg-white"
         value={value}
         onChange={onChange}
         disabled={disabled}

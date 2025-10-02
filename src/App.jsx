@@ -4,6 +4,7 @@ import { Routes, Route, Navigate, useLocation } from "react-router-dom";
 import { Suspense, lazy } from "react";
 import Navbar from "./components/Navbar";
 import ScholarshipDetail from "./pages/ScholarshipDetail.jsx";
+/*import './App.css';     // <- this will load the file you just created*/
 
 
 
@@ -41,6 +42,7 @@ const LecturerMessages = lazy(() => import("./pages/LecturerMessages.jsx"));
 const AdminMembers = lazy(() => import("./pages/AdminMembers.jsx"));
 const AdminVideoPostForm = lazy(() => import("./pages/admin/AdminVideoPostForm.jsx"));
 const AdminVideoPostsList = lazy(() => import("./pages/admin/AdminVideoPostsList.jsx"));
+
 
 
 
