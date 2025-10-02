@@ -1,3 +1,5 @@
+/* src/index.css */
+
 @import "tailwindcss";
 
 :root {
@@ -18,3 +20,21 @@ body {
 .animate-spin-slow {
   animation: spin-slow 8s linear infinite;
 }
+
+
+/* Make form text and placeholders visible */
+label, .label {
+  color: #334155;        /* slate-700 */
+  font-size: 0.875rem;   /* text-sm */
+}
+
+input, select, textarea {
+  color: #0f172a;        /* slate-900 (actual typed text) */
+  background-color: #ffffff; /* ensure light bg if your components don't set it */
+}
+
+::placeholder {
+  color: #94a3b8;        /* slate-400 */
+  opacity: 1;
+}
+
