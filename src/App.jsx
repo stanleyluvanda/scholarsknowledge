@@ -4,9 +4,6 @@ import { Routes, Route, Navigate, useLocation } from "react-router-dom";
 import { Suspense, lazy } from "react";
 import Navbar from "./components/Navbar";
 import ScholarshipDetail from "./pages/ScholarshipDetail.jsx";
-/*import './App.css';     // <- this will load the file you just created*/
-
-
 
 /* ---------- Eager (lightweight) pages ---------- */
 import Home from "./pages/Home";
@@ -17,7 +14,7 @@ import PartnerSubmitScholarship from "./pages/PartnerSubmitScholarship.jsx";
 // NEW: Contact page (adjust path if yours differs)
 import Contact from "./pages/Contact.jsx";
 import AdminStudentConsents from "./pages/AdminStudentConsents"; // ⬅️ add this
-import ForgotPassword from "./auth/ForgotPassword.jsx";
+// NOTE: Removed separate ForgotPassword page import
 
 /* ---------- Lazy (heavier) pages ---------- */
 const AdminScholarshipList = lazy(() => import("./pages/AdminScholarshipList.jsx"));
@@ -42,10 +39,6 @@ const LecturerMessages = lazy(() => import("./pages/LecturerMessages.jsx"));
 const AdminMembers = lazy(() => import("./pages/AdminMembers.jsx"));
 const AdminVideoPostForm = lazy(() => import("./pages/admin/AdminVideoPostForm.jsx"));
 const AdminVideoPostsList = lazy(() => import("./pages/admin/AdminVideoPostsList.jsx"));
-
-
-
-
 
 /* ---------- tiny auth helpers (ONE copy each) ---------- */
 function safeParse(json) { try { return JSON.parse(json || ""); } catch { return null; } }
@@ -97,8 +90,6 @@ function RequireAdmin({ children }) {
   return children;
 }
 
-
-
 function RequireLecturer({ children }) {
   const user = (function(){
     try { return JSON.parse(localStorage.getItem("currentUser") || ""); } catch { return null; }
@@ -109,46 +100,26 @@ function RequireLecturer({ children }) {
   return children;
 }
 
-
-
-
-
-
-
-
-
-
-
-
-
-
 function RequireStudent({ children }) {
   const user = loadActiveUser();
   if (!user) return <Navigate to="/login?role=student" replace />;
 
   const role = (user.role || "").toLowerCase();
   if (role !== "student") {
-    // If a lecturer tries to open this URL, send them to their dashboard
     return <Navigate to="/lecturer-dashboard" replace />;
   }
   return children;
 }
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+/* ---------- Small helpers for redirects ---------- */
+function ResetRedirect() {
+  const search = typeof window !== "undefined" ? window.location.search : "";
+  const token = new URLSearchParams(search).get("token");
+  const to = token
+    ? `/login?mode=reset&token=${encodeURIComponent(token)}`
+    : `/login?mode=reset`;
+  return <Navigate to={to} replace />;
+}
 
 /* ---------- Suspense fallback ---------- */
 function PageLoading() {
@@ -188,17 +159,14 @@ export default function App() {
             <Route path="/scholarship" element={<Scholarship />} />
             <Route path="/scholarship/:id" element={<ScholarshipDetail />} />
             <Route path="/partners" element={<Partners />} />
-            {/* NEW: Contact route */}
             <Route path="/contact" element={<Contact />} />
-            {/* Optional alias if you ever used /get-in-touch */}
-            {/* <Route path="/get-in-touch" element={<Navigate to="/contact" replace />} /> */}
 
             {/* Auth */}
             <Route path="/login" element={<Login />} />
-            <Route path="/forgot-password" element={<ForgotPassword />} />
 
-
-
+            {/* NEW: Redirects so Amplify paths work like local query-mode views */}
+            <Route path="/forgot-password" element={<Navigate to="/login?mode=forgot" replace />} />
+            <Route path="/reset-password" element={<ResetRedirect />} />
 
             {/* Sign-ups */}
             <Route path="/student-sign-up" element={<StudentSignUp />} />
@@ -218,10 +186,10 @@ export default function App() {
             <Route path="/lecturer-dashboard" element={<RequireAuth><LecturerDashboard /></RequireAuth>} />
 
             {/* Student → Contact a Lecturer */}
-            <Route path="/contact-lecturer"element={<RequireStudent><ContactLecturer /> </RequireStudent>}/>
+            <Route path="/contact-lecturer" element={<RequireStudent><ContactLecturer /></RequireStudent>} />
 
             {/* Lecturer → Students' Messages */}
-            <Route path="/lecturer/messages"element={<RequireLecturer><LecturerMessages /></RequireLecturer> }/>
+            <Route path="/lecturer/messages" element={<RequireLecturer><LecturerMessages /></RequireLecturer>} />
 
             {/* Student Marketplace */}
             <Route path="/student-marketplace" element={<RequireAuth><StudentMarketplace /></RequireAuth>} />
@@ -240,23 +208,21 @@ export default function App() {
             <Route path="/admin/scholarships/new" element={<RequireAdmin><AdminScholarshipForm mode="create" /></RequireAdmin>} />
             <Route path="/admin/scholarships/:id/edit" element={<RequireAdmin><AdminScholarshipForm mode="edit" /></RequireAdmin>} />
             <Route path="/admin/members" element={<RequireAdmin><AdminMembers /></RequireAdmin>} />
-
-            {/* Ping test */}
-            <Route path="/__ping" element={<div className="p-8">Router OK</div>} />
             <Route path="/admin/posts/video-new" element={<RequireAdmin><AdminVideoPostForm /></RequireAdmin>} />
             <Route path="/admin/posts/videos" element={<RequireAdmin><AdminVideoPostsList /></RequireAdmin>} />
 
-            {/* ⬇️ Add this route */}
-        <Route
-          path="/admin/consents"
-          element={
-            <RequireAdmin>
-              <AdminStudentConsents />
-            </RequireAdmin>
-          }
-        />
-    
+            {/* Admin Consents */}
+            <Route
+              path="/admin/consents"
+              element={
+                <RequireAdmin>
+                  <AdminStudentConsents />
+                </RequireAdmin>
+              }
+            />
 
+            {/* Ping test */}
+            <Route path="/__ping" element={<div className="p-8">Router OK</div>} />
 
             {/* 404 */}
             <Route path="*" element={<NotFound />} />

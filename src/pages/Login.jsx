@@ -77,13 +77,14 @@ export default function Login() {
   const [turnToken, setTurnToken] = useState("");     // require a non-empty token
   const [turnReady, setTurnReady] = useState(false);  // optional UI state
 
-  // ✅ Use the site key from your environment (Amplify → Env vars)
-  // Fallback to Cloudflare's public test key when running on localhost.
-  const SITE_KEY =
-    import.meta.env.VITE_TURNSTILE_SITE_KEY ||
-    (typeof window !== "undefined" && window.location.hostname === "localhost"
-      ? "1x00000000000000000000AA" // Cloudflare test key (always passes)
-      : "");
+  // replace with your real site key (already set correctly for you)
+  const SITE_KEY = "0x4AAAAAAB2QBaumf-KRvBPY";
+
+
+  // Backend API base for verification (use VITE_API_BASE if set)
+  const API_BASE =
+    (import.meta?.env?.VITE_API_BASE && String(import.meta.env.VITE_API_BASE).trim()) ||
+    "http://localhost:5001";
 
   // Make a global callback (handy for debugging & consistency)
   if (typeof window !== "undefined" && !window.onTurnstileSuccess) {
@@ -175,19 +176,47 @@ export default function Login() {
     e.preventDefault();
     setError("");
 
-    // Require a Turnstile token
-    const tokenFromSession = sessionStorage.getItem("turnstileToken") || "";
-    if (!turnToken && !tokenFromSession) {
+    // 1) Require a Turnstile token
+    const tsToken = sessionStorage.getItem("turnstileToken") || turnToken;
+    if (!tsToken) {
       setError("Please complete the human verification.");
       return;
     }
 
+    // 2) Verify the token with your Node endpoint BEFORE any password checks
+    try {
+      const ver = await fetch(`${API_BASE}/api/verify-turnstile`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ token: tsToken, action: "login" }),
+      });
+      const verRes = await ver.json().catch(() => ({}));
+      if (!ver.ok || !verRes?.ok) {
+        setError("Human verification failed. Please try again.");
+        // reset the widget for another attempt
+        try {
+          if (window.turnstile?.reset && widgetIdRef.current) {
+            window.turnstile.reset(widgetIdRef.current);
+          }
+        } catch {}
+        setTurnToken("");
+        setTurnReady(false);
+        return;
+      }
+    } catch (err) {
+      console.error("[turnstile] verify error:", err);
+      setError("Cannot reach verification service. Please try again.");
+      return;
+    }
+
+    // 3) Basic form checks
     const em = email.trim().toLowerCase();
     if (!em || !password) {
       setError("Please enter email and password.");
       return;
     }
 
+    // 4) Your existing local auth logic
     const users = safeParse(localStorage.getItem("users")) || [];
     const user = users.find(u =>
       (u?.role || "student") === role &&
@@ -205,7 +234,7 @@ export default function Login() {
     }
     if (!ok) { setError("Incorrect password."); return; }
 
-    // Mark ACTIVE
+    // 5) Mark ACTIVE
     sessionStorage.setItem("currentUser", JSON.stringify(user));
     for (const k of ["authUserId","activeUserId","currentUserId","loggedInUserId"]) {
       sessionStorage.setItem(k, user.id);
@@ -358,8 +387,8 @@ export default function Login() {
                 </div>
 
                 <div className="text-center">
-                  <Link className="inline-block mt-2 text-[#1a73e8] underline text-sm" to="/forgot-password">
-                    Forgot your password?
+                  <Link className="inline-block mt-2 text-[#1a73e8] underline text-sm" to="/login?mode=forgot">
+                    Forgot password?
                   </Link>
                 </div>
               </form>

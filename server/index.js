@@ -1,4 +1,13 @@
 // server/index.js
+import dotenv from "dotenv";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+
+// Ensure we load env from the server folder (not project root)
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+dotenv.config({ path: path.join(__dirname, ".env") });
+
 console.log(
   "[server] using routes from",
   new URL("./routes/scholarships.js", import.meta.url).pathname
@@ -6,10 +15,12 @@ console.log(
 
 import express from "express";
 import cors from "cors";
+
 import scholarshipsRoutes from "./routes/scholarships.js";
-import usersRouter from "./routes/users.js"; // <-- add this
+import usersRouter from "./routes/users.js";
 import contactRoutes from "./routes/contact.js";
 import messagesRouter from "./routes/messages.js";
+import turnstileRoute from "./routes/turnstile.js"; // <-- NEW: Turnstile verify route
 
 const app = express();
 
@@ -19,6 +30,7 @@ const app = express();
  * Still allows overriding via environment variable: PORT=6000 node index.js
  */
 const PORT = Number(process.env.PORT) || 5001;
+app.set("trust proxy", 1); // <-- helps get real client IP when behind proxies
 
 /* ------------------------------- CORS ----------------------------------- */
 /**
@@ -53,10 +65,13 @@ app.get("/api/health", (_req, res) => {
 
 /* -------------------------------- Routes -------------------------------- */
 app.use("/api/scholarships", scholarshipsRoutes);
-app.use("/api/users", usersRouter); // <-- NEW: lecturers/students users route
-app.use("/api/contact", contactRoutes); // <-- ADD THIS
+app.use("/api/users", usersRouter);
+app.use("/api/contact", contactRoutes);
 app.use("/api/messages", messagesRouter);
 
+// ✅ NEW: Cloudflare Turnstile verification endpoint
+// Exposes POST /api/verify-turnstile
+app.use("/api", turnstileRoute);
 
 /* ------------------------------ 404 Handler ------------------------------ */
 app.use((req, res) => {
